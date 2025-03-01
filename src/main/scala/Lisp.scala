@@ -3,7 +3,7 @@ package net.ivoah.lisp
 import scala.collection.mutable.{Stack, ListBuffer}
 
 case class VarArgs(fn: Seq[Value] => Value)
-case class Fn()
+// case class Fn()
 
 // type Value = Null | Boolean | Double | String | Function
 type Value = Any
@@ -23,11 +23,11 @@ sealed trait Expr {
   def eval(implicit env: Environment): Value
 }
 
-case class FnDef(parameters: Seq[Identifier], body: Expr) extends Expr {
-  override def toString(): String = s"(fn (${parameters.mkString(" ")}) $body)"
+case class FnDef(parameters: VectorExpr, body: Expr) extends Expr {
+  override def toString(): String = s"(fn $parameters $body)"
 
   override def eval(implicit env: Environment): Value = {
-    parameters match {
+    parameters.elements.map(_.asInstanceOf[Identifier]) match {
       case Seq() => () => body.eval(env ++ Map())
       case Seq(p1) => (pp1: Value) => body.eval(env ++ Map(p1.name -> pp1))
       case Seq(p1, p2) => (pp1: Value, pp2: Value) => body.eval(env ++ Map(p1.name -> pp1, p2.name -> pp2))
@@ -35,6 +35,24 @@ case class FnDef(parameters: Seq[Identifier], body: Expr) extends Expr {
       case Seq(p1, p2, p3, p4) => (pp1: Value, pp2: Value, pp3: Value, pp4: Value) => body.eval(env ++ Map(p1.name -> pp1, p2.name -> pp2, p3.name -> pp3, p4.name -> pp4))
       case Seq(p1, p2, p3, p4, p5) => (pp1: Value, pp2: Value, pp3: Value, pp4: Value, pp5: Value) => body.eval(env ++ Map(p1.name -> pp1, p2.name -> pp2, p3.name -> pp3, p4.name -> pp4, p5.name -> pp5))
     }
+  }
+}
+
+case class ObjAccess(obj: Identifier, field: Identifier) extends Expr {
+  override def toString: String = s"(. $obj $field)"
+
+  override def eval(implicit env: Environment): Value = {
+    obj.eval().asInstanceOf[LispObj](field.name)
+  }
+}
+
+case class LetBlock(bindings: VectorExpr, body: Expr) extends Expr {
+  override def toString(): String = s"(let $bindings $body)"
+
+  override def eval(implicit env: Environment): Value = {
+    body.eval(env ++ bindings.elements.grouped(2).map {
+      case Seq(identifier, value) => identifier.asInstanceOf[Identifier].name -> value.eval
+    }.toMap)
   }
 }
 
@@ -58,12 +76,14 @@ case class ListExpr(elements: Expr*) extends Expr {
   }
 }
 
-case class ObjAccess(obj: Identifier, field: Identifier) extends Expr {
-  override def toString: String = s"(. $obj $field)"
+case class VectorExpr(elements: Expr*) extends Expr {
+  override def toString(): String = elements.mkString("[", " ", "]")
+  override def eval(implicit env: Environment): Value = elements.map(_.eval)
+}
 
-  override def eval(implicit env: Environment): Value = {
-    obj.eval().asInstanceOf[LispObj](field.name)
-  }
+case class DictExpr(elements: Expr*) extends Expr {
+  override def toString(): String = elements.mkString("{", " ", "}")
+  override def eval(implicit env: Environment): Value = elements.map(_.eval).grouped(2).map { case Seq(key, value) => key -> value }.toMap
 }
 
 case class Constant[T <: Value](value: T) extends Expr {
@@ -75,6 +95,11 @@ case class Constant[T <: Value](value: T) extends Expr {
   override def eval(implicit env: Environment): Value = value
 }
 
+case class Keyword(val name: String) extends Expr {
+  override def toString(): String = s":$name"
+  override def eval(implicit env: Environment): Value = this
+}
+
 case class Identifier(val name: String) extends Expr {
   override def toString(): String = name
   override def eval(implicit env: Environment): Value = env(name)
@@ -82,21 +107,23 @@ case class Identifier(val name: String) extends Expr {
 
 def atom(value: String): Expr = {
   value match {
-    case "nil"                                                => Constant(null)
-    case boolean    if boolean.toBooleanOption.nonEmpty       => Constant(boolean.toBoolean)
-    // case int        if int.toIntOption.nonEmpty               => Constant(int.toInt)
-    case double     if double.toDoubleOption.nonEmpty         => Constant(double.toDouble)
-    case s          if s.startsWith("\"") && s.endsWith("\"") => Constant(s.substring(1, s.length - 1))
-    case identifier                                           => Identifier(identifier)
+    case "nil"                                          => Constant(null)
+    case boolean    if boolean.toBooleanOption.nonEmpty => Constant(boolean.toBoolean)
+    // case int        if int.toIntOption.nonEmpty         => Constant(int.toInt)
+    case double     if double.toDoubleOption.nonEmpty   => Constant(double.toDouble)
+    case s"\"$str\""                                    => Constant(str)
+    case s":$keyword"                                   => Keyword(keyword)
+    case identifier                                     => Identifier(identifier)
   }
 }
 
 type Token = String
 
 def tokenize(chars: String): Seq[Token] = {
+  val parens = "()[]{}".toSet
   Iterator.unfold(("", 0)) { case (curTok, i) =>
     chars.lift(i) match {
-      case Some(paren) if paren == '(' || paren == ')' => Some(Seq(curTok, paren.toString), ("", i + 1))
+      case Some(paren) if parens.contains(paren) => Some(Seq(curTok, paren.toString), ("", i + 1))
       case Some(whitespace) if whitespace.isWhitespace && curTok.nonEmpty => Some(Seq(curTok), ("", i + 1))
       case Some(whitespace) if whitespace.isWhitespace => Some(Seq(), ("", i + 1))
       case Some('"') =>
@@ -119,11 +146,26 @@ def parse(tokens: Stack[Token]): Expr = {
       }
       tokens.pop()
       L.toSeq match {
-        case Seq(Identifier("fn"), parameters: ListExpr, body: Expr) => FnDef(parameters.elements.map(_.asInstanceOf[Identifier]), body)
+        case Seq(Identifier("fn"), parameters: VectorExpr, body: Expr) => FnDef(parameters, body)
         case Seq(Identifier("."), obj: Identifier, field: Identifier) => ObjAccess(obj, field)
+        case Seq(Identifier("let"), bindings: VectorExpr, body: Expr) => LetBlock(bindings, body)
         case l => ListExpr(l*)
       }
-    case ")" => throw Exception("Unexpected )")
+    case "[" =>
+      val V = ListBuffer[Expr]()
+      while (tokens.top != "]") {
+        V.append(parse(tokens))
+      }
+      tokens.pop()
+      VectorExpr(V.toSeq*)
+    case "{" =>
+      val D = ListBuffer[Expr]()
+      while (tokens.top != "}") {
+        D.append(parse(tokens))
+      }
+      tokens.pop()
+      DictExpr(D.toSeq*)
+    case ")" | "]" | "}" => throw Exception("Unexpected )")
     case token => atom(token)
   }
 }
@@ -153,9 +195,6 @@ implicit val stdlib: Environment = Map(
     if (condition) return1
     else return2
   }),
-  "map" -> VarArgs { case args if args.length%2 == 0 =>
-    args.grouped(2).map { case Seq(key, value) => key -> value }.toMap
-  },
   "int" -> ((n: Value) => n match {
     case int:    Int    => int.toInt
     case double: Double => double.toInt
@@ -166,15 +205,14 @@ implicit val stdlib: Environment = Map(
     case double: Double => double.toDouble
     case string: String => string.toDouble
   }),
-  "seq" -> VarArgs(identity),
   "Pi" -> math.Pi,
   "cos" -> math.cos,
   "sin" -> math.sin,
-  "match" -> VarArgs {
+  "select" -> VarArgs {
     case Seq(target, cases*) => cases.grouped(2).find(c => c.head == target).map(_.last).getOrElse(null)
   },
   "range" -> ((from: Double, to: Double) => from.toInt until to.toInt),
-  "mmap" -> ((seq: Seq[Value], fn: (Value => Value)) => seq.map(fn)),
+  "map" -> ((seq: Seq[Value], fn: (Value => Value)) => seq.map(fn)),
   "concat" -> VarArgs(_.map(_.cast[Seq[Value]]).flatten),
   "rand" -> VarArgs {
     case Seq() => Random.nextDouble()
@@ -182,15 +220,3 @@ implicit val stdlib: Environment = Map(
   },
   "flatten" -> ((seq: Seq[Seq[Value]]) => seq.flatten)
 )
-
-// @main
-// def lispTest() = {
-//   val code = """
-//     (match "baz" "foo" 4 "bar" 9)
-//   """
-//   val ast = parse(code)
-//   println(ast)
-//   println(ast.eval(stdlib ++ Map(
-//     "obj" -> Map("baz" -> 10)
-//   )))
-// }
