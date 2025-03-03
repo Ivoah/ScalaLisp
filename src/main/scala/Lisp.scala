@@ -1,4 +1,4 @@
-package net.ivoah.lisp
+package net.ivoah.slippy
 
 import scala.collection.mutable.{Stack, ListBuffer}
 
