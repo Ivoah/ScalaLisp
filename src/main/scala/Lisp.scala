@@ -129,6 +129,9 @@ def tokenize(chars: String): Seq[Token] = {
       case Some('"') =>
         val endQuote = chars.indexOf("\"", i + 1)
         Some(Seq(chars.substring(i, endQuote + 1)), ("", endQuote + 1))
+      case Some(';') =>
+        val endOfLine = chars.indexOf("\n", i + 1)
+        Some(Seq(curTok), ("", if (endOfLine == -1) chars.length else endOfLine + 1))
       case Some(c) => Some(Seq(), ((curTok + c), i + 1))
       case None if curTok.nonEmpty => Some(Seq(curTok), ("", i))
       case None => None

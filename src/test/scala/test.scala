@@ -16,6 +16,14 @@ class LispTest extends munit.FunSuite {
   parseTest("(+ 9 3)", "(+ 9.0 3.0)")
   parseTest("""{:foo "bar" :baz "bob"}""", """{:foo "bar" :baz "bob"}""")
   parseTest("[1 2 3]", "[1.0 2.0 3.0]")
+  parseTest("""
+    :foo ; a comment!
+  """, ":foo")
+  parseTest("""
+    :foo; a comment!
+  """, ":foo")
+  parseTest(":foo ; a comment", ":foo")
+  parseTest(":foo; a comment", ":foo")
 
   evalTest("(+ 9 3)", 12.0)
   evalTest("""{:foo "bar" :baz "bob"}""", Map(slippy.Keyword("foo") -> "bar", slippy.Keyword("baz") -> "bob"))
