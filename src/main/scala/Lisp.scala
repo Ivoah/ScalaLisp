@@ -86,6 +86,11 @@ case class DictExpr(elements: Expr*) extends Expr {
   override def eval(implicit env: Environment): Value = elements.map(_.eval).grouped(2).map { case Seq(key, value) => key -> value }.toMap
 }
 
+case class If(condition: Expr, trueCase: Expr, falseCase: Expr) extends Expr {
+  override def toString(): String = s"(if $condition $trueCase $falseCase)"
+  override def eval(implicit env: Environment): Value = if (condition.eval.asInstanceOf[Boolean]) trueCase.eval else falseCase.eval
+}
+
 case class Constant[T <: Value](value: T) extends Expr {
   override def toString(): String = value match {
     case v if v == null => "nil"
@@ -152,6 +157,7 @@ def parse(tokens: Stack[Token]): Expr = {
         case Seq(Identifier("fn"), parameters: VectorExpr, body: Expr) => FnDef(parameters, body)
         case Seq(Identifier("."), obj: Identifier, field: Identifier) => ObjAccess(obj, field)
         case Seq(Identifier("let"), bindings: VectorExpr, body: Expr) => LetBlock(bindings, body)
+        case Seq(Identifier("if"), condition: Expr, trueCase: Expr, falseCase: Expr) => If(condition, trueCase, falseCase)
         case l => ListExpr(l*)
       }
     case "[" =>
@@ -194,10 +200,10 @@ implicit val stdlib: Environment = Map(
   "/" -> ((a: Double, b: Double) => a/b),
   "%" -> ((a: Double, b: Double) => a%b),
   "=" -> VarArgs(args => args.forall(_ == args.head)),
-  "if" -> ((condition: Boolean, return1: Any, return2: Any) => {
-    if (condition) return1
-    else return2
-  }),
+  // "if" -> ((condition: Boolean, return1: Any, return2: Any) => {
+  //   if (condition) return1
+  //   else return2
+  // }),
   "int" -> ((n: Value) => n match {
     case int:    Int    => int.toInt
     case double: Double => double.toInt
@@ -221,5 +227,7 @@ implicit val stdlib: Environment = Map(
     case Seq() => Random.nextDouble()
     case Seq(a: Double, b: Double) => Random.between(a, b)
   },
-  "flatten" -> ((seq: Seq[Seq[Value]]) => seq.flatten)
+  "flatten" -> ((seq: Seq[Seq[Value]]) => seq.flatten),
+  "print" -> ((x: Any) => print(x)),
+  "println" -> ((x: Any) => println(x)),
 )
