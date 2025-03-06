@@ -1,8 +1,8 @@
 ThisBuild / organization := "net.ivoah"
 
-ThisBuild / version := "0.1.0"
+ThisBuild / version := "0.2.0-SNAPSHOT"
 
-ThisBuild / scalaVersion := "3.3.5"
+ThisBuild / scalaVersion := "3.6.3"
 
 lazy val root = (project in file("."))
   .settings(

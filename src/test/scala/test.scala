@@ -1,4 +1,5 @@
 import net.ivoah.slippy
+import net.ivoah.slippy.{Value => v, Keyword => kw}
 
 class LispTest extends munit.FunSuite {
   import slippy.stdlib
@@ -8,14 +9,14 @@ class LispTest extends munit.FunSuite {
     assertEquals(ast.toString, expected)
   }
 
-  def evalTest[T](code: String, expected: T)(implicit loc: munit.Location) = test(s"eval $code == $expected") {
+  def evalTest(code: String, expected: slippy.Value)(implicit loc: munit.Location) = test(s"eval $code == $expected") {
     val result = slippy.eval(code)
     assertEquals(result, expected)
   }
 
-  parseTest("(+ 9 3)", "(+ 9.0 3.0)")
+  parseTest("(+ 9 3)", "(+ 9 3)")
   parseTest("""{:foo "bar" :baz "bob"}""", """{:foo "bar" :baz "bob"}""")
-  parseTest("[1 2 3]", "[1.0 2.0 3.0]")
+  parseTest("[1 2 3]", "[1 2 3]")
   parseTest("""
     :foo ; a comment!
   """, ":foo")
@@ -25,8 +26,8 @@ class LispTest extends munit.FunSuite {
   parseTest(":foo ; a comment", ":foo")
   parseTest(":foo; a comment", ":foo")
 
-  evalTest("(+ 9 3)", 12.0)
-  evalTest("""{:foo "bar" :baz "bob"}""", Map(slippy.Keyword("foo") -> "bar", slippy.Keyword("baz") -> "bob"))
-  evalTest("[1 2 3]", Seq(1.0, 2.0, 3.0))
-  evalTest("(let [foo 9 bar 8] (+ foo bar))", 17.0)
+  evalTest("(+ 9 3)", v(12))
+  evalTest("""{:foo "bar" :baz "bob"}""", v(Map(v(kw("foo")) -> v("bar"), v(kw("baz")) -> v("bob"))))
+  evalTest("[1 2 3]", v(Seq(v(1), v(2), v(3))))
+  evalTest("(let [foo 9 bar 8] (+ foo bar))", v(17))
 }
