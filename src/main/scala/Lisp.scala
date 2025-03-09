@@ -38,11 +38,12 @@ val implicits = Map[(Type[?], Type[?]), Value => Value](
 // }
 
 case class Value(t: Type[?], v: Any) {
-  def cast(to: Type[?]): Value = implicits.getOrElse((t, to), to.cast)(this)  
+  def cast(to: Type[?]): Value = implicits.getOrElse((t, to), to.cast)(this)
+  def toScala[T]: T = v.asInstanceOf[T]
 }
 
 object Value {
-  def apply[T](v: T): Value = v match {
+  def apply(v: Any): Value = v match {
     case null         => Value(Type.Nil, null)
     case i: Int       => Value(Type.Integer, i)
     case d: Double    => Value(Type.Double, d)
@@ -244,7 +245,7 @@ implicit val stdlib: Environment = Map(
     Seq(Type.Integer, Type.Integer),
     {
       case Seq(a: Value, b: Value) =>
-        Value(a.v.asInstanceOf[Int] + b.v.asInstanceOf[Int])
+        Value(a.toScala[Int] + b.toScala[Int])
     }
   ))
   // "+" -> VarArgs(_.map(_.cast[Double]).sum),
